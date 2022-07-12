@@ -1,0 +1,26 @@
+{
+    "name": "shaun/refiner",
+    "type": "composer-plugin",
+    "config": {
+        "platform": {
+            "php": "7.1"
+        }
+    },
+    "require": {
+        "php": "^7.1 || ^8.0",
+        "composer-plugin-api": "^2.0"
+    },
+    "require-dev": {
+        "composer/composer": "^2.0",
+        "vimeo/psalm": "^4.24",
+        "phpunit/phpunit": "^7"
+    },
+    "autoload": {
+        "psr-4": {
+            "Nibbletech\\Composer\\Plugins\\CustomRules\\": "src/"
+        }
+    },
+    "extra": {
+        "class": "Nibbletech\\Composer\\Plugins\\CustomRules\\ComposerRules"
+    }
+}
