@@ -11,18 +11,45 @@ use Nibbletech\Composer\Plugins\CustomRules\Rules\Rule;
 class ComposerRulesConfig
 {
     /**
+     * @var Composer
+     */
+    private $composer;
+    /**
+     * @var IOInterface
+     */
+    private $io;
+    /**
      * @var array<string, Rule>
      */
     private $enabledRules = [];
-    
-    public function enableRule(Rule $rule): void
-    {
-        $this->enabledRules[get_class($rule)] = $rule;
+
+    public function __construct(
+        Composer $composer,
+        IOInterface $io
+    ) {
+        $this->composer = $composer;
+        $this->io = $io;
     }
 
-    private function init(): void
+    /**
+     * @param interface-string<Rule> $ruleClass
+     * @param object|null $ruleConfig
+     *
+     * @return void
+     */
+    public function enableRule($ruleClass, $ruleConfig = null): void
     {
+        $bridge = new ComposerRunnerBridge(
+            $this->composer,
+            $this->io
+        );
 
+        $rule = new $ruleClass(
+            $bridge,
+            $ruleConfig
+        );
+
+        $this->enabledRules[get_class($rule)] = $rule;
     }
 
     /**

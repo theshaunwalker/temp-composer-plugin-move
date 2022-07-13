@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Nibbletech\Composer\Plugins\CustomRules\Rules;
+namespace Nibbletech\Composer\Plugins\CustomRules\Rules\ExplicitPhp;
 
-use Composer\Composer;
 use Composer\EventDispatcher\EventSubscriberInterface;
-use Composer\IO\IOInterface;
 use Composer\Package\BasePackage;
 use Composer\Plugin\PrePoolCreateEvent;
 use Composer\Repository\RootPackageRepository;
+use Nibbletech\Composer\Plugins\CustomRules\ComposerRunnerBridge;
+use Nibbletech\Composer\Plugins\CustomRules\Rules\Rule;
 
 /**
  * Mandate packages explicitly define their PHP requirement
@@ -17,26 +17,20 @@ use Composer\Repository\RootPackageRepository;
 class ExplicitPhp implements Rule, EventSubscriberInterface
 {
     /**
-     * @var Composer
+     * @var ComposerRunnerBridge
      */
-    private $composer;
+    private $composerBridge;
     /**
-     * @var IOInterface
-     */
-    private $io;
-    /**
-     * @var array
+     * @var ExplicitPhpConfig
      */
     private $config;
 
     public function __construct(
-        Composer $composer,
-        IOInterface $io,
-        array $config = []
+        ComposerRunnerBridge $composerBridge,
+        ExplicitPhpConfig $config = null
     ) {
-        $this->composer = $composer;
-        $this->io       = $io;
-        $this->config   = $config;
+        $this->composerBridge = $composerBridge;
+        $this->config         = $config ?? new ExplicitPhpConfig();
     }
 
     public static function getSubscribedEvents()
@@ -51,7 +45,7 @@ class ExplicitPhp implements Rule, EventSubscriberInterface
         $this->errorOnMissingPhpRequire($event);
     }
 
-    public function errorOnMissingPhpRequire(PrePoolCreateEvent $event): void
+    private function errorOnMissingPhpRequire(PrePoolCreateEvent $event): void
     {
         $packages = $event->getPackages();
 
@@ -63,10 +57,12 @@ class ExplicitPhp implements Rule, EventSubscriberInterface
              * Are we ignoring this package?
              */
             if (
+                $this->config->isPackageToCheck($package->getName()) === false
+                || $this->config->isIgnoredPackage($package->getName())
                 /**
                  * Ignore root packages.
                  */
-                $package->getRepository() instanceof RootPackageRepository
+                || $package->getRepository() instanceof RootPackageRepository
                 /**
                  * Ignore platform packages. We only care about userland.
                  */
@@ -83,18 +79,19 @@ class ExplicitPhp implements Rule, EventSubscriberInterface
             }
         }
 
+
         if (!empty($missingPhpPackages)) {
 
-            $this->io->error("The following packages are missing PHP requires:");
+            $this->composerBridge->getIo()->debug("Found packages missing PHP in their requires:");
 
             foreach ($missingPhpPackages as $missingPhpPackage) {
-                $this->io->writeError($missingPhpPackage->getPrettyName());
+                $this->composerBridge->getIo()->debug($missingPhpPackage->getPrettyName());
             }
-
-            die();
         }
 
-        $event->setPackages($goodPackages);
+        $event->setPackages(
+            $goodPackages
+        );
     }
 
     /**
@@ -103,19 +100,20 @@ class ExplicitPhp implements Rule, EventSubscriberInterface
      * Blindly trusting composer for now to exclude completely invalid php values.
      * (Don't know how much it actually handles bad php values)
      */
-    public function hasPhpInRequires(BasePackage $basePackage): bool
+    private function hasPhpInRequires(BasePackage $package): bool
     {
-        $outputDebug = $this->io->isVerbose();
+        $outputDebug = $this->composerBridge->getIo()->isVerbose();
         
-        if ($outputDebug) $this->io->write($basePackage->getPrettyString());
-        foreach ($basePackage->getRequires() as $require) {
+        if ($outputDebug) $this->composerBridge->getIo()->write($package->getPrettyString());
+
+        foreach ($package->getRequires() as $require) {
             if ($require->getTarget() == "php") {
-                if ($outputDebug) $this->io->write("has php");
+                if ($outputDebug) $this->composerBridge->getIo()->write("has php");
                 return true;
             }
         }
 
-        if ($outputDebug) $this->io->error("missing php");
+        if ($outputDebug) $this->composerBridge->getIo()->error("missing php");
         return false;
     }
 }

@@ -2,43 +2,38 @@
 
 declare(strict_types=1);
 
-namespace Nibbletech\Composer\Plugins\CustomRules\Rules;
+namespace Nibbletech\Composer\Plugins\CustomRules\Rules\BlockDowngrades;
 
-use Composer\Command\BaseDependencyCommand;
-use Composer\Command\DependsCommand;
-use Composer\Composer;
 use Composer\DependencyResolver\Operation\UpdateOperation;
 use Composer\EventDispatcher\EventSubscriberInterface;
 use Composer\Installer\PackageEvent;
-use Composer\IO\IOInterface;
 use Composer\Package\PackageInterface;
 use Composer\Package\Version\VersionParser;
+use Nibbletech\Composer\Plugins\CustomRules\ComposerRunnerBridge;
+use Nibbletech\Composer\Plugins\CustomRules\Rules\Rule;
+use Nibbletech\Composer\Plugins\CustomRules\Rules\RuleError;
 use Symfony\Component\Console\Input\ArrayInput;
-use Symfony\Component\Console\Output\BufferedOutput;
-use Symfony\Component\Console\Output\NullOutput;
 
 class BlockDowngrades implements Rule, EventSubscriberInterface
 {
     /**
-     * @var Composer
+     * @var ComposerRunnerBridge
      */
-    private $composer;
-    /**
-     * @var IOInterface
-     */
-    private $io;
-
+    private $composerBridge;
     /**
      * @var PackageInterface[]
      */
     private $downgradePackages = [];
 
+
+    /**
+     * @psalm-suppress MissingParamType
+     */
     public function __construct(
-        Composer $composer,
-        IOInterface $io
+        ComposerRunnerBridge $composerBridge,
+        $config = null
     ) {
-        $this->composer = $composer;
-        $this->io = $io;
+        $this->composerBridge = $composerBridge;
     }
 
     public static function getSubscribedEvents()
@@ -51,9 +46,6 @@ class BlockDowngrades implements Rule, EventSubscriberInterface
 
     public function preUpdate(PackageEvent $event): void
     {
-        $this->io->writeError("pre update");
-
-
         $operation = $event->getOperation();
         if ($operation instanceof UpdateOperation === false) {
             return;
@@ -70,18 +62,15 @@ class BlockDowngrades implements Rule, EventSubscriberInterface
     
     public function postUpdate(PackageEvent $event): void
     {
-        $this->io->writeError("Post update");
-
         if (count($this->downgradePackages) > 0) {
-            $this->io->writeError("Total downgrade packages: " . count($this->downgradePackages));
+            $this->composerBridge->getIo()->error("Total downgraded packages: " . count($this->downgradePackages));
 
             foreach ($this->downgradePackages as $downgrade) {
-                $this->io->writeError("Package: " . $downgrade->getName());
-                $this->io->writeError("Why:");
+                $this->composerBridge->getIo()->error(PHP_EOL);
+                $this->composerBridge->getIo()->error("Why: " . $downgrade->getName());
                 $this->runDependsCommand($downgrade);
-                $this->io->writeError(PHP_EOL);
             }
-            throw new \Exception("Downgrades detected.");
+            throw new RuleError("Downgrades detected.");
         }
 
     }
@@ -96,17 +85,10 @@ class BlockDowngrades implements Rule, EventSubscriberInterface
     
     private function runDependsCommand(PackageInterface $package): void
     {
-
-        $command = new DependsCommand();
-        $command->setComposer($this->composer);
-
         $input = new ArrayInput(['package' => $package->getName()]);
-        $output = new BufferedOutput();
 
-        $command->run($input, $output);
-
-        $commandOutput = $output->fetch();
+        $commandOutput = $this->composerBridge->runDepends($input);
         
-        $this->io->writeRaw($commandOutput);
+        $this->composerBridge->getIo()->error($commandOutput);
     }
 }

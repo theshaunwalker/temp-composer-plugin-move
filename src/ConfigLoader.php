@@ -6,7 +6,6 @@ namespace Nibbletech\Composer\Plugins\CustomRules;
 
 use Composer\Composer;
 use Composer\IO\IOInterface;
-use Nibbletech\Composer\Plugins\CustomRules\Rules\Rule;
 
 class ConfigLoader
 {
@@ -30,30 +29,12 @@ class ConfigLoader
 
     public function load(): ComposerRulesConfig
     {
-        $configObject = new ComposerRulesConfig();
-
         $config = $this->loadConfigFile();
 
-        foreach ($config['rules'] as $rule => $ruleConfig) {
-            /** @var Rule */
-            $configObject->enableRule(
-                new $rule(
-                    $this->composer,
-                    $this->io,
-                    $ruleConfig
-                )
-            );
-        }
-
-        return $configObject;
+        return $config;
     }
 
-    /**
-     * @psalm-suppress MixedReturnTypeCoercion
-     *
-     * @return array{rules:array<interface-string<Rule>, array>}
-     */
-    private function loadConfigFile(): array
+    private function loadConfigFile(): ComposerRulesConfig
     {
         $vendorDir = (string) $this->composer->getConfig()->get('vendor-dir');
 
@@ -62,54 +43,26 @@ class ConfigLoader
 
         $this->io->info("Using config file " . $path);
 
-        if (file_exists($path)) {
-            /** @psalm-suppress MissingFile */
-            $config = include($filename);
-        } else {
-            $this->io->error("Composer Rules plugin: Missing config file, using default config. Please create it at " . $path);
-            $config = [
-                'rules' => []
-            ];
+        $configObject = new ComposerRulesConfig(
+            $this->composer,
+            $this->io
+        );
+
+        // No config file so just return the default
+        /** @psalm-suppress MissingFile */
+        if (file_exists($path) === false) {
+            return $configObject;
         }
 
-        if (is_array($config) === false) {
-            $this->io->error("Configuration file is invalid. Ensure config file is returning an array.");
-            die();
+        $configCallable = include($path);
+
+        if (is_callable($configCallable) === false) {
+            $this->io->error("Composer Rules plugin config invalid. Ensure it is returning a callable. Falling back to default values.");
+            return $configObject;
         }
 
-        $config = $this->cleanConfigFileContents($config);
+        $configCallable($configObject);
 
-        return $config;
-    }
-
-    /**
-     * @param array $config
-     *
-     * @return array{rules:array<interface-string<Rule>, array>}
-     */
-    private function cleanConfigFileContents(array $config): array
-    {
-        $cleanedConfig = [];
-
-        $cleanedRules = [];
-        /** @psalm-suppress MixedAssignment */
-        foreach ($config['rules'] ?? [] as $rule => $ruleConfig) {
-            $rule = (string) $rule;
-            if (is_array($ruleConfig) === false) {
-                $rule       = (string) $ruleConfig;
-                $ruleConfig = [];
-            }
-
-            if (in_array(Rule::class, class_implements($rule)) === false) {
-                continue;
-            }
-
-            /** @var interface-string<Rule> $rule */
-            $cleanedRules[$rule] = $ruleConfig;
-        }
-
-        $cleanedConfig['rules'] = $cleanedRules;
-
-        return $cleanedConfig;
+        return $configObject;
     }
 }

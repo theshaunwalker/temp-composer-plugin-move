@@ -7,9 +7,7 @@ namespace Nibbletech\Composer\Plugins\CustomRules;
 use Composer\Composer;
 use Composer\EventDispatcher\EventSubscriberInterface;
 use Composer\IO\IOInterface;
-use Composer\Package\BasePackage;
 use Composer\Plugin\PluginInterface;
-use Composer\Plugin\PrePoolCreateEvent;
 
 /**
  * @psalm-suppress MissingConstructor
