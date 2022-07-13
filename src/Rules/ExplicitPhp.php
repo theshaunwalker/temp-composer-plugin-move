@@ -55,34 +55,37 @@ class ExplicitPhp implements Rule, EventSubscriberInterface
     {
         $packages = $event->getPackages();
 
+        $goodPackages = [];
+
         $missingPhpPackages = [];
         foreach ($packages as $package) {
             /**
-             * Ignore root package.
+             * Are we ignoring this package?
              */
-            if ($package->getRepository() instanceof RootPackageRepository) {
+            if (
+                /**
+                 * Ignore root packages.
+                 */
+                $package->getRepository() instanceof RootPackageRepository
+                /**
+                 * Ignore platform packages. We only care about userland.
+                 */
+                || $package->isPlatform()
+            ) {
+                $goodPackages[] = $package;
                 continue;
             }
-            /**
-             * We only care about userland packages. Ignore all platform packages.
-             */
-            if ($package->isPlatform()) {
-                continue;
-            }
-
-            $this->io->write("================");
-            $this->io->write("Refiner : Package name " . $package->getName());
-            $this->io->write("Refiner : Package string " . $package->getPrettyString());
-            $this->io->write("Refiner : Package version " . $package->getVersion());
-            $this->io->write("================");
 
             if ($this->hasPhpInRequires($package) === false) {
                 $missingPhpPackages[] = $package;
+            } else {
+                $goodPackages[] = $package;
             }
         }
 
         if (!empty($missingPhpPackages)) {
-            $this->io->writeError("The following packages are missing PHP requires:");
+
+            $this->io->error("The following packages are missing PHP requires:");
 
             foreach ($missingPhpPackages as $missingPhpPackage) {
                 $this->io->writeError($missingPhpPackage->getPrettyName());
@@ -90,6 +93,8 @@ class ExplicitPhp implements Rule, EventSubscriberInterface
 
             die();
         }
+
+        $event->setPackages($goodPackages);
     }
 
     /**
@@ -100,12 +105,17 @@ class ExplicitPhp implements Rule, EventSubscriberInterface
      */
     public function hasPhpInRequires(BasePackage $basePackage): bool
     {
+        $outputDebug = $this->io->isVerbose();
+        
+        if ($outputDebug) $this->io->write($basePackage->getPrettyString());
         foreach ($basePackage->getRequires() as $require) {
             if ($require->getTarget() == "php") {
+                if ($outputDebug) $this->io->write("has php");
                 return true;
             }
         }
 
+        if ($outputDebug) $this->io->error("missing php");
         return false;
     }
 }
